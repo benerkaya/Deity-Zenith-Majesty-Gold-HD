@@ -1,4 +1,4 @@
-# Deity - a summoning mod for Majesty Gold HD
+# Deity Zenith - a summoning mod for Majesty Gold HD
 
 Deity lets you play god in **Majesty Gold HD**. Choose something in a Cheat Engine table, place a flag, and it appears there:
 
@@ -100,5 +100,5 @@ Every change is confirmed by a chat message in the game. All entries and their n
 
 ## Credits
 
-Deity by **Bener Kaya**.
+Deity Zenith by **Bener Kaya**.
 Majesty is a trademark of its respective owners. This is an unofficial fan mod.
