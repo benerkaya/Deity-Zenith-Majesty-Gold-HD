@@ -595,7 +595,7 @@
 		<Text id="IDTXT_FMX_HOOK_ON_H">DZ: flag summon is ON, faction not Friendly - summoning enemies at your flag...</Text>
 		<Text id="IDTXT_FMX_HFAIL">The selected hostile monster could not be summoned.</Text>
 		<Text id="IDTXT_FMX_HPARTIAL">Some hostile monsters appeared, but not all could be summoned.</Text>
-		<Text id="IDTXT_FMX_BHOST">Factions Hostile/Red/Green do not apply to buildings: this building is yours.</Text>
+		<Text id="IDTXT_FMX_BHOST">This building is always yours: factions Hostile/Red/Green do not apply to it.</Text>
 		<Text id="IDTXT_FMX_GHOST">Factions Hostile/Red/Green do not apply to guards: these guards are yours.</Text>
 		<Text id="IDTXT_FMX_GFAIL">The selected guard could not be summoned.</Text>
 		<Text id="IDTXT_FMX_LFAIL">The lair could not be placed there (blocked ground?).</Text>
@@ -1086,5 +1086,16 @@
 		<Text id="IDTXT_FMX_HENN_02">Peasants have joined your kingdom.</Text>
 		<Text id="IDTXT_FMX_HEN1_03">A Tax Collector has joined your kingdom.</Text>
 		<Text id="IDTXT_FMX_HENN_03">Tax Collectors have joined your kingdom.</Text>
+		<Text id="IDTXT_FMX_HG_01">[DZ] Hostile City Guards appeared at your flag. They guard the nearest Guardhouse of their side (or its Palace or Dark Palace placed by DZ).</Text>
+		<Text id="IDTXT_FMX_HG_02">[DZ] Hostile Veteran Guards appeared at your flag. They guard the nearest Guardhouse of their side (or its Palace or Dark Palace placed by DZ).</Text>
+		<Text id="IDTXT_FMX_HG_03">[DZ] Hostile Palace Guards appeared at your flag. They guard the nearest Guardhouse of their side (or its Palace or Dark Palace placed by DZ).</Text>
+		<Text id="IDTXT_FMX_HG_GH">[DZ] Their side had no Guardhouse, so one was built at your flag for them.</Text>
+		<Text id="IDTXT_FMX_HG_BLD">[DZ] A hostile Guardhouse was built at your flag. Summon City, Veteran or Palace Guards of the same faction to man it.</Text>
+		<Text id="IDTXT_FMX_HG_ATTACK">[DZ] Attack mode: the flagged target belongs to another side - the hostile guards attack it.</Text>
+		<Text id="IDTXT_FMX_HG_GUARD">[DZ] The flagged target belongs to their side - the guards guard it from the nearest Guardhouse or Palace of that side.</Text>
+		<Text id="IDTXT_FMX_HB_BLD">[DZ] The building was placed at your flag for the picked faction (not yours). It works for that side and can be attacked.</Text>
+		<Text id="IDTXT_FMX_HB_DECOR">[DZ] The guild or temple was placed at your flag for the picked faction (not yours). It is decor: no heroes join it. It can be attacked.</Text>
+		<Text id="IDTXT_FMX_HB_OUT">[DZ] The Outpost was placed at your flag for the picked faction (not yours). Its Palace Guards defend it. It has no taxes, peasants or income, and losing it ends nobody's game.</Text>
+		<Text id="IDTXT_FMX_HB_LEG">[DZ] Legendary Heroes quest: guilds and temples can only be yours here.</Text>
 	</Language>
 </Majesty>

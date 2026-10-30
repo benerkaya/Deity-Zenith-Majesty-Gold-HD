@@ -1063,6 +1063,20 @@ declare
 	boolean dark, pal;
 begin
 	bt = $ListMember ($FM_Bld_List (), e - 200);
+	// Guardhouse with faction Hostile / Red / Green: a Guardhouse of that side (Blue: below, unchanged)
+	if (bt == "GuardHouse1")
+		if ($FM_Is_Hostile ())
+			begin
+				$FM_HG_Flag_Guardhouse (palace, spot);
+				return;
+			end
+	// every other building with faction Hostile / Red / Green: a building of that side (Blue: below, unchanged)
+	if ($FM_Is_Hostile ())
+		if ($FM_HB_Hostile (palace, e - 200))
+			begin
+				$FM_HB_Flag_Building (palace, e - 200, spot);
+				return;
+			end
 	dark = FALSE;
 	pal = FALSE;
 	if (bt == "EvilPalace")
@@ -1823,6 +1837,12 @@ declare
 	string gt;
 	agent g, h;
 begin
+	// Hostile / Red / Green: guards of that side (Blue: below, unchanged)
+	if ($FM_Is_Hostile ())
+		begin
+			$FM_HG_Flag_Guards (palace, e, spot, target);
+			return;
+		end
 	gt = $ListMember ($FM_Guard_List (), e - 100);
 	n = $FM_Count ();
 	if ($FM_Is_Hostile ())
@@ -3116,6 +3136,9 @@ declare
 	agent u;
 begin
 	thisagent's "type" = "Dead";
+	// a palace of another side (never yours: #Player_1, as FM_Palace): its guards are released
+	if ($GetUnitPlayerNumber (thisagent) != #Player_1)
+		$FM_HG_Release (thisagent);
 	l = $GetBuildingContents (thisagent);
 	foreach u in l do
 		begin
@@ -3775,6 +3798,398 @@ begin
 		return;
 	g's "Target" = target;
 	g's "ActiveScript" = $Voyaging_Guard_Attack_Object;
+end
+
+////////////////////////////////////////////////////////////////////////////////
+// ===== Hostile guards (faction Hostile / Red / Green only; Blue guards use FM_Flag_Guards as before) =====
+// The game's guard AI (mx_Building_Guard.gpl) works for any owner: enemies are found with
+// list_enemies_seen (#NotMyTeam) from the guard's Home, and the Home's Guard_Function thread
+// (Building_Guard) releases the guards sleeping in it. What a non-player side lacks is a Palace:
+// City_Guard_Birth reads its Home from the Waiting_Guardhouses of the owner's Palace. So the home is
+// set here, right after the (synchronous) birth. Nothing is ever put on a Waiting_Guardhouses list,
+// and only buildings of the guards' own side are homes: a Guardhouse, or a Palace / Dark Palace placed
+// by Deity Zenith (their Building_Guard thread keeps running). Outposts are not used.
+function FM_HG_Post (agent b, integer owner) is boolean
+declare
+begin
+	if ($IsValidGamePiece (b) == FALSE)
+		return FALSE;
+	if ($IsDead (b))
+		return FALSE;
+	if ($GetUnitPlayerNumber (b) != owner)
+		return FALSE;
+	// quest "rescue" buildings: Type unknown, EnemyType nothing (Building_Guard does nothing there)
+	if (b's "type" != "building")
+		return FALSE;
+	if (b's "EnemyType" == "nothing")
+		return FALSE;
+	if (b's "title" == "GuardHouse")
+		return TRUE;
+	if ($FM_Is_Mod_Palace (b))
+		return TRUE;
+	return FALSE;
+end
+
+// nearest home of that side to the spot (skip = a building that is going away), else null
+function FM_HG_Home (agent ref, coordinate spot, integer owner, agent skip) is agent
+declare
+	list blds;
+	agent b, h;
+	integer d, best;
+begin
+	h = $NullAgent ();
+	best = -1;
+	$ListObjects (ref, "building", -1, blds);
+	foreach b in blds do
+		begin
+			if (b != skip)
+				if ($FM_HG_Post (b, owner))
+					begin
+						d = $DistanceBetweenCoords ($LocationOf (b), spot);
+						if (best < 0 || d < best)
+							begin
+								best = d;
+								h = b;
+							end
+					end
+		end
+	return h;
+end
+
+// a Guardhouse of that side at the spot (as FM_Flag_Building places buildings)
+function FM_HG_Guardhouse (agent palace, coordinate spot, integer owner) is agent
+declare
+	agent b;
+	integer tries;
+begin
+	b = $SpawnUnit (palace, "GuardHouse1", spot, owner, "maxhp");
+	tries = 0;
+	while ($IsValidGamePiece (b) == FALSE && tries < 3) do
+		begin
+			b = $SpawnUnit (palace, "GuardHouse1", $RandomCoord (spot, 100, 250), owner, "maxhp");
+			tries = tries + 1;
+		end
+	if ($IsValidGamePiece (b))
+		$FM_Fac_Team (palace, b);
+	return b;
+end
+
+// home h, registered like City_Guard_Birth / Palace_Guard_Birth do, scripts = the guard's start
+// scripts (Guard_Voyage_Home), AI thread running
+function FM_HG_Attach (agent g, agent h)
+declare
+	agent old;
+begin
+	if ($IsDead (g))
+		return;
+	if ($FM_HG_Post (h, $GetUnitPlayerNumber (g)))
+		begin
+			old = g's "Home";
+			if (old != h)
+				begin
+					if ($IsDead (old) == FALSE)
+						if ($GetUnitPlayerNumber (old) == $GetUnitPlayerNumber (g))
+							if ($AgentInList (g, old's "Guards"))
+								begin
+									old's "Guards" -= g;
+									old's "Num_Guards" = old's "Num_Guards" - 1;
+								end
+					g's "Home" = h;
+				end
+			if ($AgentInList (g, h's "Guards") == FALSE)
+				begin
+					h's "Guards" << g;
+					h's "Num_Guards" = h's "Num_Guards" + 1;
+				end
+		end
+	g's "Target" = $NullAgent ();
+	g's "ActiveScript" = $Guard_Voyage_Home;
+	g's "BasicScript" = $Guard_Voyage_Home;
+	g's "BackScript" = $Guard_Voyage_Home;
+	if ($IsRunning (g's "ActiveScript") == FALSE)
+		$NewThread (g's "ActiveScript", #Henchmen_Cycle, g);
+end
+
+function FM_HG_Spawn (agent palace, string gt, coordinate spot, agent h, integer owner) is agent
+declare
+	agent g;
+begin
+	// spawned by the home: Palace_Guard_Birth takes $Parent as home
+	g = $FM_Spawn_Safe (h, gt, $RandomCoord (spot, 120), owner, "override");
+	if ($IsValidGamePiece (g) == FALSE)
+		g = $FM_Spawn_Safe (h, gt, $RandomCoord (spot, 100, 250), owner, "override");
+	if ($IsValidGamePiece (g) == FALSE)
+		return g;
+	$FM_HG_Attach (g, h);
+	$FM_Fac_Team (palace, g);
+	return g;
+end
+
+function FM_HG_Keys () is list
+declare
+	list L;
+begin
+	L << "IDTXT_FMX_HG_01";
+	L << "IDTXT_FMX_HG_02";
+	L << "IDTXT_FMX_HG_03";
+	return L;
+end
+
+function FM_HG_Flag_Guards (agent palace, integer e, coordinate spot, agent target)
+declare
+	integer i, n, made, mode, owner;
+	string gt;
+	agent g, h;
+	boolean built;
+begin
+	gt = $ListMember ($FM_Guard_List (), e - 100);
+	n = $FM_Count ();
+	owner = $FM_Host_Player (palace);
+	// Attack flag: owner of the guards vs owner of the target, as for the other summons
+	mode = 0;
+	h = $NullAgent ();
+	if ($IsDead (target) == FALSE)
+		begin
+			mode = 2;
+			if ($GetUnitPlayerNumber (target) == owner)
+				mode = 1;
+		end
+	if (mode == 1)
+		if ($FM_HG_Post (target, owner))
+			h = target;
+	if ($IsValidGamePiece (h) == FALSE)
+		h = $FM_HG_Home (palace, spot, owner, $NullAgent ());
+	built = FALSE;
+	if ($IsValidGamePiece (h) == FALSE)
+		begin
+			h = $FM_HG_Guardhouse (palace, spot, owner);
+			if ($IsValidGamePiece (h) == FALSE)
+				begin
+					$FM_Say (palace, "IDTXT_FMX_GFAIL");
+					return;
+				end
+			built = TRUE;
+		end
+	made = 0;
+	i = 0;
+	while (i < n) do
+		begin
+			g = $FM_HG_Spawn (palace, gt, spot, h, owner);
+			if ($IsValidGamePiece (g))
+				begin
+					if (mode == 2)
+						$FM_Guard_Attack (g, target);
+					made = made + 1;
+				end
+			i = i + 1;
+		end
+	$FM_Say_Owner (palace);
+	if (built)
+		$FM_Say (palace, "IDTXT_FMX_HG_GH");
+	if (made == 0)
+		begin
+			$FM_Say (palace, "IDTXT_FMX_GFAIL");
+			return;
+		end
+	$FM_Say (palace, $ListMember ($FM_HG_Keys (), e - 100));
+	if (mode == 2)
+		$FM_Say (palace, "IDTXT_FMX_HG_ATTACK");
+	if (mode == 1)
+		$FM_Say (palace, "IDTXT_FMX_HG_GUARD");
+	if (made < n)
+		$FM_Say (palace, "IDTXT_FMX_PARTIAL");
+end
+
+// Guardhouse entry with faction Hostile / Red / Green: a Guardhouse of that side
+function FM_HG_Flag_Guardhouse (agent palace, coordinate spot)
+declare
+	agent b;
+begin
+	b = $FM_HG_Guardhouse (palace, spot, $FM_Host_Player (palace));
+	if ($IsValidGamePiece (b) == FALSE)
+		begin
+			$FM_Say (palace, "IDTXT_FMX_BFAIL");
+			return;
+		end
+	$FM_Say_Owner (palace);
+	$FM_Say (palace, "IDTXT_FMX_HG_BLD");
+end
+
+// a Deity Zenith Palace / Dark Palace of another side dies: its guards move to the nearest other home
+// of their side, else they do what the game's GuardHouse_Death makes them do (Guard_Goto_Palace)
+function FM_HG_Release (agent b)
+declare
+	agent g, h;
+	list l;
+begin
+	l = b's "Guards";
+	foreach g in l do
+		begin
+			if ($IsDead (g) == FALSE)
+				begin
+					if ($IsHidden (g))
+						begin
+							g's "Type" = "Hero";
+							$UnHide (g);
+						end
+					h = $FM_HG_Home (b, $LocationOf (b), $GetUnitPlayerNumber (g), b);
+					if ($IsValidGamePiece (h))
+						begin
+							g's "Home" = h;
+							$FM_HG_Attach (g, h);
+						end
+					else
+						begin
+							g's "ActiveScript" = $Guard_Goto_Palace;
+							g's "BasicScript" = $Guard_Goto_Palace;
+							g's "BackScript" = $Guard_Goto_Palace;
+						end
+					$ResumeThread (g's "ActiveScript");
+				end
+		end
+end
+
+
+////////////////////////////////////////////////////////////////////////////////
+// ===== Hostile buildings (faction Hostile / Red / Green only; Blue buildings use FM_Flag_Building as before) =====
+// The building is spawned for the picked side (FM_Host_Player: the monster player, Red or Green, never you) and
+// then prepared right away, before its delayed second birth script (basic_birth / magical_birth start
+// birthscript2 1 ms later) reads its slots:
+// - guilds, temples, Embassy, Outpost: no open hero slot (#ATTRIB_MaxGuildMembers 0), so check_strays
+//   (guild_birth, warriors_guild_birth, Outpost_Birth, Embassy_Birth) and Embassy_Spawn never adopt or hire a hero;
+// - no timers that place more buildings (spawn_1 / spawn_2: Brothel, Gambling Hall, Gazebo), no caravans
+//   (Trading Post), no hero spawning (Embassy), no new Gnome Hovels (that side's Palace gnome_camp_spawner);
+// - Outpost: the mod's palace death (no $declareloss, no Player_Dead_Cleanup), no income / tax collectors /
+//   peasants, its own Palace Guards (for the monster player Outpost_Birth starts nothing, so they are started here).
+// Everything else (towers shooting, shops, revenue into the building's own gold, the stock death scripts) is the
+// game's own code, which works for any owner. Nothing here reads or changes a building of yours.
+// In the Legendary Heroes quest (Quest_Number 33) the game's guild births reopen a hero slot, so guilds and temples
+// stay yours there.
+function FM_HB_Guild (integer k) is boolean
+declare
+begin
+	// 1..11 guilds and temples, 21..23 Dwarven Settlement / Elven Bungalow / Gnome Hovel, 35 Embassy
+	if (k >= 1 && k <= 11)
+		return TRUE;
+	if (k >= 21 && k <= 23)
+		return TRUE;
+	if (k == 35)
+		return TRUE;
+	return FALSE;
+end
+
+function FM_HB_Hostile (agent palace, integer k) is boolean
+declare
+	agent root;
+	string bt;
+begin
+	bt = $ListMember ($FM_Bld_List (), k);
+	// Guardhouse: FM_HG_Flag_Guardhouse; the mod's Palace / Dark Palace: their own path; Graveyard: always yours
+	if (bt == "GuardHouse1" || bt == "EvilPalace" || bt == "Palace3" || bt == "Graveyard")
+		return FALSE;
+	if ($FM_HB_Guild (k))
+		begin
+			root = $RetrieveAgent ("GplAIRoot");
+			if ($HasAttribute ("Quest_Number", root))
+				if (root's "Quest_Number" == 33)
+					begin
+						$FM_Say (palace, "IDTXT_FMX_HB_LEG");
+						return FALSE;
+					end
+		end
+	return TRUE;
+end
+
+function FM_HB_Prep (agent b, integer k, integer owner)
+declare
+	string bt;
+	list l;
+	agent p;
+begin
+	bt = $ListMember ($FM_Bld_List (), k);
+	if ($FM_HB_Guild (k) || bt == "Outpost")
+		$SetAttribute (b, #ATTRIB_MaxGuildMembers, 0);
+	if ($HasAttribute ("spawn_1", b))
+		begin
+			if ($IsRunning (b's "spawn_1"))
+				$KillThread (b's "spawn_1");
+			b's "spawn_1" = $FM_DarkPalace_Idle;
+		end
+	if ($HasAttribute ("spawn_2", b))
+		begin
+			if ($IsRunning (b's "spawn_2"))
+				$KillThread (b's "spawn_2");
+			b's "spawn_2" = $FM_DarkPalace_Idle;
+		end
+	if (bt == "Embassy" || bt == "Trading_Post")
+		begin
+			if ($IsRunning (b's "activeScript"))
+				$KillThread (b's "activeScript");
+			b's "activeScript" = $FM_DarkPalace_Idle;
+		end
+	if (bt == "Gnome_Hovel")
+		begin
+			$ListObjects (b, "building", -1, l, #CheckTitles, "Palace", #MyPlayer);
+			foreach p in l do
+				begin
+					if ($GetUnitPlayerNumber (p) == owner)
+						if ($HasAttribute ("gnome_camp_spawner", p))
+							begin
+								if ($IsRunning (p's "gnome_camp_spawner"))
+									$KillThread (p's "gnome_camp_spawner");
+								p's "gnome_camp_spawner" = $FM_DarkPalace_Idle;
+							end
+				end
+		end
+	if (bt == "Outpost")
+		begin
+			b's "IGdeathScript" = $FM_DarkPalace_Death;
+			if ($IsRunning (b's "activeScript"))
+				$KillThread (b's "activeScript");
+			if ($IsRunning (b's "Tax_spawn"))
+				$KillThread (b's "Tax_spawn");
+			if ($IsRunning (b's "peasant_spawn"))
+				$KillThread (b's "peasant_spawn");
+			b's "activeScript" = $FM_DarkPalace_Idle;
+			b's "Tax_spawn" = $FM_DarkPalace_Idle;
+			b's "peasant_spawn" = $FM_DarkPalace_Idle;
+			if (owner == #Monster_Player)
+				begin
+					$NewThread (b's "Guard_Function", #Normal_Cycle, b);
+					$RunThread (b's "Guard_Spawn_Function", #initial_Palace_guard_delay, b);
+				end
+		end
+end
+
+function FM_HB_Flag_Building (agent palace, integer k, coordinate spot)
+declare
+	agent b;
+	integer tries, owner;
+	string bt;
+begin
+	bt = $ListMember ($FM_Bld_List (), k);
+	owner = $FM_Host_Player (palace);
+	b = $SpawnUnit (palace, bt, spot, owner, "maxhp");
+	tries = 0;
+	while ($IsValidGamePiece (b) == FALSE && tries < 3) do
+		begin
+			b = $SpawnUnit (palace, bt, $RandomCoord (spot, 100, 250), owner, "maxhp");
+			tries = tries + 1;
+		end
+	if ($IsValidGamePiece (b) == FALSE)
+		begin
+			$FM_Say (palace, "IDTXT_FMX_BFAIL");
+			return;
+		end
+	$FM_HB_Prep (b, k, owner);
+	$FM_Fac_Team (palace, b);
+	$FM_Say_Owner (palace);
+	if (bt == "Outpost")
+		$FM_Say (palace, "IDTXT_FMX_HB_OUT");
+	else if ($FM_HB_Guild (k))
+		$FM_Say (palace, "IDTXT_FMX_HB_DECOR");
+	else
+		$FM_Say (palace, "IDTXT_FMX_HB_BLD");
 end
 
 // ===== Part 2: original Majesty =====
@@ -4697,6 +5112,20 @@ declare
 	boolean dark, pal;
 begin
 	bt = $ListMember ($FMB_Bld_List (), e - 200);
+	// Guardhouse with faction Hostile / Red / Green: a Guardhouse of that side (Blue: below, unchanged)
+	if (bt == "GuardHouse1")
+		if ($FMB_Is_Hostile ())
+			begin
+				$FMB_HG_Flag_Guardhouse (palace, spot);
+				return;
+			end
+	// every other building with faction Hostile / Red / Green: a building of that side (Blue: below, unchanged)
+	if ($FMB_Is_Hostile ())
+		if ($FMB_HB_Hostile (palace, e - 200))
+			begin
+				$FMB_HB_Flag_Building (palace, e - 200, spot);
+				return;
+			end
 	dark = FALSE;
 	pal = FALSE;
 	if (bt == "EvilPalace")
@@ -5373,6 +5802,12 @@ declare
 	string gt;
 	agent g, h;
 begin
+	// Hostile / Red / Green: guards of that side (Blue: below, unchanged)
+	if ($FMB_Is_Hostile ())
+		begin
+			$FMB_HG_Flag_Guards (palace, e, spot, target);
+			return;
+		end
 	gt = $ListMember ($FMB_Guard_List (), e - 100);
 	n = $FMB_Count ();
 	if ($FMB_Is_Hostile ())
@@ -6626,6 +7061,9 @@ declare
 	agent u;
 begin
 	thisagent's "type" = "Dead";
+	// a palace of another side (never yours: #Player_1, as FMB_Palace): its guards are released
+	if ($GetUnitPlayerNumber (thisagent) != #Player_1)
+		$FMB_HG_Release (thisagent);
 	l = $GetBuildingContents (thisagent);
 	foreach u in l do
 		begin
@@ -7241,7 +7679,7 @@ end
 function FMB_Flag_Finish (agent thisagent, agent target)
 declare
 	agent palace;
-	list mons, mine, hoos;
+	list mons, mine, hoos, hgs;
 	coordinate spot;
 	integer n;
 begin
@@ -7252,12 +7690,18 @@ begin
 			$ListObjects (thisagent, "monster", 900, mons, #InsideOtherUnits);
 			$ListObjects (thisagent, "hero", 900, mine, #InsideOtherUnits, #MyPlayer);
 			$ListObjects (thisagent, "Hooligan", 900, hoos, #InsideOtherUnits);
+			// hostile guards of another side (only while some wait for step 2)
+			if ($FMB_HG_Pending ())
+				$ListObjects (thisagent, "hero", 900, hgs, #InsideOtherUnits, #NotMyPlayer);
 		end
 	$DeleteGamePiece (thisagent);
 	if ($IsValidGamePiece (palace) == FALSE)
 		return;
 	$FMB_Q_Restore ();
 	$FMB_Hero_Finish (mons, mine, hoos, target, spot);
+	if ($ListSize (hgs) > 0)
+		if ($FMB_HG_Finish (hgs, target) > 0)
+			$FMB_HG_Count (-1);
 	n = $FMB_Fix_List (palace, mons, target, spot);
 	n = n + $FMB_Fix_List (palace, mine, target, spot);
 	if (n > 0)
@@ -7865,6 +8309,422 @@ begin
 							u's "Task_Number" = 0;
 						end
 		end
+end
+
+////////////////////////////////////////////////////////////////////////////////
+// ===== Hostile guards (faction Hostile / Red / Green only; Blue guards use FMB_Flag_Guards as before) =====
+// The game's guard AI (Building_Guard.gpl) works for any owner: enemies are found with
+// list_enemies_seen (#NotMyTeam) from the guard's Home, and the Home's Guard_Function thread
+// (Building_Guard) releases the guards sleeping in it. What a non-player side lacks is a Palace:
+// City_Guard_Birth reads its Home from the Waiting_Guardhouses of $GetPalace (the owner's palace slot).
+// Original births run a moment after the spawn, so the home is set at step 2 (FMB_HG_Finish, from
+// FMB_Flag_Finish); the home picked at step 1 is kept in the guard's BackTarget (no guard script uses it). Nothing is ever put on a Waiting_Guardhouses list,
+// and only buildings of the guards' own side are homes: a Guardhouse, or a Palace placed
+// by Deity Zenith (their Building_Guard thread keeps running). Outposts are not used.
+function FMB_HG_Post (agent b, integer owner) is boolean
+declare
+begin
+	if ($IsValidGamePiece (b) == FALSE)
+		return FALSE;
+	if ($IsDead (b))
+		return FALSE;
+	if ($GetUnitPlayerNumber (b) != owner)
+		return FALSE;
+	// quest "rescue" buildings: Type unknown, EnemyType nothing (Building_Guard does nothing there)
+	if (b's "type" != "building")
+		return FALSE;
+	if (b's "EnemyType" == "nothing")
+		return FALSE;
+	if (b's "title" == "GuardHouse")
+		return TRUE;
+	if ($FMB_Is_Mod_Palace (b))
+		return TRUE;
+	return FALSE;
+end
+
+// nearest home of that side to the spot (skip = a building that is going away), else null
+function FMB_HG_Home (agent ref, coordinate spot, integer owner, agent skip) is agent
+declare
+	list blds;
+	agent b, h;
+	integer d, best;
+begin
+	h = $NullAgent ();
+	best = -1;
+	$ListObjects (ref, "building", -1, blds);
+	foreach b in blds do
+		begin
+			if (b != skip)
+				if ($FMB_HG_Post (b, owner))
+					begin
+						d = $DistanceBetweenCoords ($LocationOf (b), spot);
+						if (best < 0 || d < best)
+							begin
+								best = d;
+								h = b;
+							end
+					end
+		end
+	return h;
+end
+
+// a Guardhouse of that side at the spot (as FMB_Flag_Building places buildings)
+function FMB_HG_Guardhouse (agent palace, coordinate spot, integer owner) is agent
+declare
+	agent b;
+	integer tries;
+begin
+	b = $SpawnUnit (palace, "GuardHouse1", spot, owner, "maxhp");
+	tries = 0;
+	while ($IsValidGamePiece (b) == FALSE && tries < 3) do
+		begin
+			b = $SpawnUnit (palace, "GuardHouse1", $RandomCoord (spot, 100, 250), owner, "maxhp");
+			tries = tries + 1;
+		end
+	if ($IsValidGamePiece (b))
+		$FMB_Fac_Team (palace, b);
+	return b;
+end
+
+// home h, registered like City_Guard_Birth / Palace_Guard_Birth do, scripts = the guard's start
+// scripts (Guard_Voyage_Home), AI thread running
+function FMB_HG_Attach (agent g, agent h)
+declare
+	agent old;
+begin
+	if ($IsDead (g))
+		return;
+	if ($FMB_HG_Post (h, $GetUnitPlayerNumber (g)))
+		begin
+			old = g's "Home";
+			if (old != h)
+				begin
+					if ($IsDead (old) == FALSE)
+						if ($GetUnitPlayerNumber (old) == $GetUnitPlayerNumber (g))
+							if ($AgentInList (g, old's "Guards"))
+								begin
+									old's "Guards" -= g;
+									old's "Num_Guards" = old's "Num_Guards" - 1;
+								end
+					g's "Home" = h;
+				end
+			if ($AgentInList (g, h's "Guards") == FALSE)
+				begin
+					h's "Guards" << g;
+					h's "Num_Guards" = h's "Num_Guards" + 1;
+				end
+		end
+	g's "Target" = $NullAgent ();
+	g's "ActiveScript" = $Guard_Voyage_Home;
+	g's "BasicScript" = $Guard_Voyage_Home;
+	g's "BackScript" = $Guard_Voyage_Home;
+	if ($IsRunning (g's "ActiveScript") == FALSE)
+		$NewThread (g's "ActiveScript", #Henchmen_Cycle, g);
+end
+
+function FMB_HG_Spawn (agent palace, string gt, coordinate spot, agent h, integer owner, agent target, integer mode) is agent
+declare
+	agent g;
+begin
+	// spawned by the home: Palace_Guard_Birth takes $Parent as home
+	g = $FMB_Spawn_Safe (h, gt, $RandomCoord (spot, 120), owner, "override");
+	if ($IsValidGamePiece (g) == FALSE)
+		g = $FMB_Spawn_Safe (h, gt, $RandomCoord (spot, 100, 250), owner, "override");
+	if ($IsValidGamePiece (g) == FALSE)
+		return g;
+	// the birth runs a moment later: home, scripts and thread are set at step 2 (FMB_HG_Finish)
+	g's "BackTarget" = h;
+	g's "Task_Number" = 7798005;
+	if (mode == 2)
+		begin
+			g's "Target" = target;
+			g's "Task_Number" = 7798006;
+		end
+	$FMB_Fac_Team (palace, g);
+	return g;
+end
+
+// step-1 counter: FMB_Flag_Finish lists other sides' units only while hostile guards wait for step 2
+function FMB_HG_Pending () is boolean
+declare
+	agent root;
+begin
+	root = $FMB_Root ();
+	if ($HasAttribute ("FMB_HG_Pend", root) == FALSE)
+		return FALSE;
+	if (root's "FMB_HG_Pend" > 0)
+		return TRUE;
+	return FALSE;
+end
+
+function FMB_HG_Count (integer d)
+declare
+	agent root;
+	integer v;
+begin
+	root = $FMB_Root ();
+	if ($HasAttribute ("FMB_HG_Pend", root) == FALSE)
+		$AddAttribute (root, "FMB_HG_Pend", "integer", 0);
+	v = root's "FMB_HG_Pend" + d;
+	if (v < 0)
+		v = 0;
+	root's "FMB_HG_Pend" = v;
+end
+
+// step 2 (the guards' births have run): home, scripts, thread, attack target
+function FMB_HG_Finish (list l, agent target) is integer
+declare
+	agent u, h;
+	integer n, owner;
+begin
+	n = 0;
+	foreach u in l do
+		begin
+			if ($isdead (u) == FALSE)
+				if ($HasAttribute ("Task_Number", u))
+					if (u's "Task_Number" == 7798005 || u's "Task_Number" == 7798006)
+						begin
+							owner = $GetUnitPlayerNumber (u);
+							h = u's "BackTarget";
+							if ($FMB_HG_Post (h, owner) == FALSE)
+								h = $FMB_HG_Home (u, $LocationOf (u), owner, $NullAgent ());
+							u's "BackTarget" = $NullAgent ();
+							$FMB_HG_Attach (u, h);
+							if (u's "Task_Number" == 7798006)
+								if ($FMB_BG_Gone (target) == FALSE)
+									begin
+										u's "Target" = target;
+										u's "ActiveScript" = $Voyaging_Guard_Attack_Object;
+									end
+							u's "Task_Number" = 0;
+							n = n + 1;
+						end
+		end
+	return n;
+end
+
+function FMB_HG_Keys () is list
+declare
+	list L;
+begin
+	L << "IDTXT_FMB_HG_01";
+	L << "IDTXT_FMB_HG_02";
+	L << "IDTXT_FMB_HG_03";
+	return L;
+end
+
+function FMB_HG_Flag_Guards (agent palace, integer e, coordinate spot, agent target)
+declare
+	integer i, n, made, mode, owner;
+	string gt;
+	agent g, h;
+	boolean built;
+begin
+	gt = $ListMember ($FMB_Guard_List (), e - 100);
+	n = $FMB_Count ();
+	owner = $FMB_Host_Player (palace);
+	// Attack flag: owner of the guards vs owner of the target, as for the other summons
+	mode = 0;
+	h = $NullAgent ();
+	if ($IsDead (target) == FALSE)
+		begin
+			mode = 2;
+			if ($GetUnitPlayerNumber (target) == owner)
+				mode = 1;
+		end
+	if (mode == 1)
+		if ($FMB_HG_Post (target, owner))
+			h = target;
+	if ($IsValidGamePiece (h) == FALSE)
+		h = $FMB_HG_Home (palace, spot, owner, $NullAgent ());
+	built = FALSE;
+	if ($IsValidGamePiece (h) == FALSE)
+		begin
+			h = $FMB_HG_Guardhouse (palace, spot, owner);
+			if ($IsValidGamePiece (h) == FALSE)
+				begin
+					$FMB_Say (palace, "IDTXT_FMB_GFAIL");
+					return;
+				end
+			built = TRUE;
+		end
+	made = 0;
+	i = 0;
+	while (i < n) do
+		begin
+			g = $FMB_HG_Spawn (palace, gt, spot, h, owner, target, mode);
+			if ($IsValidGamePiece (g))
+				made = made + 1;
+			i = i + 1;
+		end
+	if (made > 0)
+		$FMB_HG_Count (1);
+	$FMB_Say_Owner (palace);
+	if (built)
+		$FMB_Say (palace, "IDTXT_FMB_HG_GH");
+	if (made == 0)
+		begin
+			$FMB_Say (palace, "IDTXT_FMB_GFAIL");
+			return;
+		end
+	$FMB_Say (palace, $ListMember ($FMB_HG_Keys (), e - 100));
+	if (mode == 2)
+		$FMB_Say (palace, "IDTXT_FMB_HG_ATTACK");
+	if (mode == 1)
+		$FMB_Say (palace, "IDTXT_FMB_HG_GUARD");
+	if (made < n)
+		$FMB_Say (palace, "IDTXT_FMB_PARTIAL");
+end
+
+// Guardhouse entry with faction Hostile / Red / Green: a Guardhouse of that side
+function FMB_HG_Flag_Guardhouse (agent palace, coordinate spot)
+declare
+	agent b;
+begin
+	b = $FMB_HG_Guardhouse (palace, spot, $FMB_Host_Player (palace));
+	if ($IsValidGamePiece (b) == FALSE)
+		begin
+			$FMB_Say (palace, "IDTXT_FMB_BFAIL");
+			return;
+		end
+	$FMB_Say_Owner (palace);
+	$FMB_Say (palace, "IDTXT_FMB_HG_BLD");
+end
+
+// a Deity Zenith Palace of another side dies: its guards move to the nearest other home
+// of their side, else they do what the game's GuardHouse_Death makes them do (Guard_Goto_Palace)
+function FMB_HG_Release (agent b)
+declare
+	agent g, h;
+	list l;
+begin
+	l = b's "Guards";
+	foreach g in l do
+		begin
+			if ($IsDead (g) == FALSE)
+				begin
+					if ($IsHidden (g))
+						begin
+							g's "Type" = "Hero";
+							$UnHide (g);
+						end
+					h = $FMB_HG_Home (b, $LocationOf (b), $GetUnitPlayerNumber (g), b);
+					if ($IsValidGamePiece (h))
+						begin
+							g's "Home" = h;
+							$FMB_HG_Attach (g, h);
+						end
+					else
+						begin
+							g's "ActiveScript" = $Guard_Goto_Palace;
+							g's "BasicScript" = $Guard_Goto_Palace;
+							g's "BackScript" = $Guard_Goto_Palace;
+						end
+					$ResumeThread (g's "ActiveScript");
+				end
+		end
+end
+
+
+////////////////////////////////////////////////////////////////////////////////
+// ===== Hostile buildings (faction Hostile / Red / Green only; Blue buildings use FMB_Flag_Building as before) =====
+// Same rules as the Expansion part. Original births run about 1 ms after the spawn, so everything below is set
+// before any birth script reads it. Round 23 rules: no AddAttribute, no birthScript swap; only existing slots are
+// assigned (as FMB_ModPalace_Prep does).
+// - guilds and temples: "max_members" 0 (the Original GuildHasOpenSlots reads it), so check_strays (guild_birth and
+//   warriors_guild_birth run it for every owner) never adopts a hero;
+// - no spawn_1 / spawn_2 timers (Brothel, Gambling Hall, Gazebo), no caravans (Trading Post), no new Gnome Hovels
+//   (the side's palace slot gnome_camp_spawner, $GetPalace of the new building = that side, never yours).
+function FMB_HB_Guild (integer k) is boolean
+declare
+begin
+	// 1..11 guilds and temples, 21..23 Dwarven Settlement / Elven Bungalow / Gnome Hovel
+	if (k >= 1 && k <= 11)
+		return TRUE;
+	if (k >= 21 && k <= 23)
+		return TRUE;
+	return FALSE;
+end
+
+function FMB_HB_Hostile (agent palace, integer k) is boolean
+declare
+	string bt;
+begin
+	bt = $ListMember ($FMB_Bld_List (), k);
+	// Guardhouse: FMB_HG_Flag_Guardhouse; the mod's Palace: its own path; Graveyard: always yours
+	if (bt == "GuardHouse1" || bt == "EvilPalace" || bt == "Palace3" || bt == "Graveyard")
+		return FALSE;
+	return TRUE;
+end
+
+function FMB_HB_Prep (agent b, integer k, integer owner)
+declare
+	string bt;
+	agent p;
+begin
+	bt = $ListMember ($FMB_Bld_List (), k);
+	if ($FMB_HB_Guild (k))
+		if ($HasAttribute ("max_members", b))
+			b's "max_members" = 0;
+	if ($HasAttribute ("spawn_1", b))
+		begin
+			if ($IsRunning (b's "spawn_1"))
+				$KillThread (b's "spawn_1");
+			b's "spawn_1" = $FMB_DarkPalace_Idle;
+		end
+	if ($HasAttribute ("spawn_2", b))
+		begin
+			if ($IsRunning (b's "spawn_2"))
+				$KillThread (b's "spawn_2");
+			b's "spawn_2" = $FMB_DarkPalace_Idle;
+		end
+	if (bt == "Trading_Post")
+		begin
+			if ($IsRunning (b's "activeScript"))
+				$KillThread (b's "activeScript");
+			b's "activeScript" = $FMB_DarkPalace_Idle;
+		end
+	if (bt == "Gnome_Hovel")
+		begin
+			p = $GetPalace (b);
+			if ($IsValidGamePiece (p))
+				if ($GetUnitPlayerNumber (p) == owner)
+					if ($HasAttribute ("gnome_camp_spawner", p))
+						begin
+							if ($IsRunning (p's "gnome_camp_spawner"))
+								$KillThread (p's "gnome_camp_spawner");
+							p's "gnome_camp_spawner" = $FMB_DarkPalace_Idle;
+						end
+		end
+end
+
+function FMB_HB_Flag_Building (agent palace, integer k, coordinate spot)
+declare
+	agent b;
+	integer tries, owner;
+	string bt;
+begin
+	bt = $ListMember ($FMB_Bld_List (), k);
+	owner = $FMB_Host_Player (palace);
+	b = $SpawnUnit (palace, bt, spot, owner, "maxhp");
+	tries = 0;
+	while ($IsValidGamePiece (b) == FALSE && tries < 3) do
+		begin
+			b = $SpawnUnit (palace, bt, $RandomCoord (spot, 100, 250), owner, "maxhp");
+			tries = tries + 1;
+		end
+	if ($IsValidGamePiece (b) == FALSE)
+		begin
+			$FMB_Say (palace, "IDTXT_FMB_BFAIL");
+			return;
+		end
+	$FMB_HB_Prep (b, k, owner);
+	$FMB_Fac_Team (palace, b);
+	$FMB_Say_Owner (palace);
+	if ($FMB_HB_Guild (k))
+		$FMB_Say (palace, "IDTXT_FMB_HB_DECOR");
+	else
+		$FMB_Say (palace, "IDTXT_FMB_HB_BLD");
 end
 
 // ===== one mod for both rulesets =====

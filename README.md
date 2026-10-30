@@ -78,9 +78,11 @@ Every change is confirmed by a chat message in the game. All entries and their n
 ## Good to know
 
 - **Red / Green** only work when that kingdom is on the map. Otherwise the summons are Hostile, and a chat message says so.
-- **Buildings, guards, peasants and tax collectors are always yours**, whatever faction you choose.
+- **Buildings follow the faction** (Blue = yours). Exceptions: the Graveyard, peasants and tax collectors are always yours. A Hostile / Red / Green building works for that side and can be attacked; it never gives you or takes from you gold, heroes or buildings.
+- **Hostile / Red / Green guilds and temples** (and the Embassy) are decor: no heroes join them. Towers, the Dwarven Settlement and Outposts shoot at that side's enemies. A hostile Outpost makes its own Palace Guards but no taxes, peasants or income, and destroying it ends nobody's game. A hostile Trading Post sends no caravans; hostile buildings never place more buildings by themselves. In the Legendary Heroes quest, guilds and temples stay yours.
 - **Friendly monsters:** at most 40 can be alive at once. Heroes don't count.
-- **Summoned guards** join the nearest Guardhouse, Outpost or Palace. They count towards its guard limit, so that building makes no new guards of its own until some of them die.
+- **Summoned Blue guards** join your nearest Guardhouse, Outpost or Palace. They count towards its guard limit, so that building makes no new guards of its own until some of them die.
+- **Hostile / Red / Green guards** live in the nearest Guardhouse of their side, or in a Palace or Dark Palace of that side made by Deity Zenith. If that side has neither, a Guardhouse is built for them at the flag first. They never use Outposts or your buildings.
 - **Summoned Blue heroes** have no guild. They explore, fight and level up, but cannot rest in a guild.
 - **Quest heroes** (Angry Wizard, Scions of Chaos) are normal heroes with quest-level stats. They do not start quest events.
 - **Dark Palaces can't be clicked** in the game. To target one made by Deity Zenith, place an Explore flag right next to it. Destroying a Palace or Dark Palace made by Deity Zenith never ends the game.
