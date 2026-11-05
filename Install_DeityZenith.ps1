@@ -256,7 +256,7 @@ try {
     'Install' {
       Remove-OldLayout
       Write-Host ''
-      Write-Host 'Deity Zenith is installed. Start Majesty Gold HD, then open DeityZenith.CT in Cheat Engine.' -ForegroundColor Green
+      Write-Host 'Deity Zenith is installed. Start Majesty Gold HD, then open Deity Zenith MajestyHD.CT in Cheat Engine.' -ForegroundColor Green
       Write-Host 'After a Steam update or a file check, run Install.bat again (Status.bat tells you when).'
     }
     'Uninstall' {

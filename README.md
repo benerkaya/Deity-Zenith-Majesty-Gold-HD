@@ -45,7 +45,7 @@ Double-click **`Uninstall.bat`**. It puts back the game's original files and rem
 
 ## How to play with it
 
-1. Open **`DeityZenith.CT`** (the Cheat Engine table) in Cheat Engine.
+1. Open **`Deity Zenith MajestyHD.CT`** (the Cheat Engine table) in Cheat Engine.
 2. Tick **"Deity Zenith Hotkeys (tick before starting Majesty)"**. Make sure **NumLock** is on.
 3. Start Majesty Gold HD and start or load a game. The chat says *"DZ is running..."*.
 4. Tick **"Deity Zenith - Activate"** or press **Ctrl+Num 0**. Cheat Engine connects to the game by itself. Do this again after loading a save.
@@ -98,7 +98,7 @@ The files inside `DeityZenith\` keep the short internal name `Deity` (the names 
 | File | What it is |
 |---|---|
 | `Install.bat`, `Status.bat`, `Uninstall.bat` | double-click these |
-| `DeityZenith.CT` | the Cheat Engine table |
+| `Deity Zenith MajestyHD.CT` | the Cheat Engine table |
 | `DeityZenith\Deity.bcd` | the mod (one file for both rulesets) |
 | `DeityZenith\Deity_MX_Text.xml`, `DeityZenith\Deity_Text.xml` | the mod's chat texts (expansion / original) |
 | `DeityZenith\GPL\` | the mod's source code |
