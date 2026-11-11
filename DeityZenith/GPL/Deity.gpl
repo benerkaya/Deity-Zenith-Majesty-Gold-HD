@@ -633,6 +633,13 @@ begin
 		$AddAttribute (root, "FMCE_Ping", "integer", 7602176);
 	if ($HasAttribute ("FMCE_Rules", root) == FALSE)
 		$AddAttribute (root, "FMCE_Rules", "integer", 7667713);
+	if ($HasAttribute ("FMCE_Abil", root) == FALSE)
+		begin
+			$AddAttribute (root, "FMCE_Abil", "integer", 7733249);
+			root's "FMCE_Abil" = 7733249;
+		end
+	if ($HasAttribute ("FMCE_Give", root) == FALSE)
+		$AddAttribute (root, "FMCE_Give", "integer", 0);
 	return root;
 end
 
@@ -2068,6 +2075,7 @@ declare
 begin
 	if ($isdead (thisagent))
 		return;
+	$DZA_Check (thisagent);
 	root = $FM_Root ();
 	o = 0;
 	if ($FM_Is_On ())
@@ -4744,6 +4752,13 @@ begin
 		$AddAttribute (root, "FMCE_Ping", "integer", 7602176);
 	if ($HasAttribute ("FMCE_Rules", root) == FALSE)
 		$AddAttribute (root, "FMCE_Rules", "integer", 7667714);
+	if ($HasAttribute ("FMCE_Abil", root) == FALSE)
+		begin
+			$AddAttribute (root, "FMCE_Abil", "integer", 7733249);
+			root's "FMCE_Abil" = 7733249;
+		end
+	if ($HasAttribute ("FMCE_Give", root) == FALSE)
+		$AddAttribute (root, "FMCE_Give", "integer", 0);
 	return root;
 end
 
@@ -6022,6 +6037,7 @@ begin
 	if ($IsValidGamePiece (palace) == FALSE)
 		return;
 	$FMB_Value_Check (palace);
+	$DZA_Ensure_B (palace);
 end
 
 function FMB_Say_Status (agent palace)
@@ -8725,6 +8741,367 @@ begin
 		$FMB_Say (palace, "IDTXT_FMB_HB_DECOR");
 	else
 		$FMB_Say (palace, "IDTXT_FMB_HB_BLD");
+end
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// ===== Give Ability to Selected Unit (both rulesets) =====
+// Cheat Engine reads the game's selected unit and writes its agent number into the GplAIRoot integer FMCE_Give
+// (-1 = nothing selected, -2 = not a unit: building, lair, flag...). FMCE_Abil = 7733248 + ability number (1..63). DZA_Check runs every 0.7 s
+// (Expansion: inside FM_Value_Watch; Original: a thread in GplAIRoot's UtilityScript slot, see DZA_Ensure_B),
+// turns the number back into the unit with $AgentNumber (as check_rewards does with a flag's targetID) and gives
+// the spell with $LearnSpell, the same call the game uses for the Spellbook, the Shards, the Bazaar / Legendary
+// items, the Hooligan thief and the Angry Wizard. Only integer AddAttribute (Round 23 rules).
+// Abilities 1..41 exist in both rulesets (M_Actions.xml); 42..63 only in the Expansion (MX_Actions.xml).
+
+function DZA_Names () is list
+declare
+	list L;
+begin
+	L << "energy_blast";
+	L << "power_shock";
+	L << "flame_shield";
+	L << "fire_shield";
+	L << "fire_blast";
+	L << "teleport";
+	L << "fire_ball";
+	L << "resist_magic";
+	L << "meteor_storm";
+	L << "healer_heal";
+	L << "meditation";
+	L << "aura_of_peace";
+	L << "hands_of_steel";
+	L << "monk_stone_skin";
+	L << "iron_will";
+	L << "drain_life";
+	L << "animate_skeleton";
+	L << "charm_monster";
+	L << "camouflage";
+	L << "change_shape";
+	L << "shield_of_light";
+	L << "sun_scorch";
+	L << "teleport_short";
+	L << "teleport_short_amulet";
+	L << "multiple enemy attack";
+	L << "acid_bolt";
+	L << "electrical_fury";
+	L << "exploding_aura";
+	L << "force";
+	L << "paralytic_gaze";
+	L << "insect_swarm";
+	L << "life_leach";
+	L << "level_leach";
+	L << "magic_mirror";
+	L << "vortex";
+	L << "summon_skeleton";
+	L << "Summon_Spider";
+	L << "inferno";
+	L << "radiate_energy";
+	L << "get_healer";
+	L << "monster_multi_attack";
+	L << "Turn_Undead_Healer";
+	L << "Double_attack";
+	L << "Teleport_long";
+	L << "Howl_of_Discord";
+	L << "Fire_Hammer_Spell";
+	L << "Stonebacks_Shield";
+	L << "Item_Damage_Shield";
+	L << "Item_Healing";
+	L << "Gorgon_Petrify";
+	L << "Medusa_Slow";
+	L << "Horrify";
+	L << "Infectious_Cloud";
+	L << "Pestilence";
+	L << "SBeast_Speed";
+	L << "Wendigo_Blink";
+	L << "Summon_Medusae";
+	L << "Summon_Sbeast";
+	L << "Mind_warp";
+	L << "Terrify";
+	L << "Speed_Monster";
+	L << "Damage_Shield";
+	L << "Medusa_Stare";
+	return L;
+end
+
+function DZA_Levels () is list
+declare
+	list L;
+begin
+	L << 1;
+	L << 1;
+	L << 1;
+	L << 2;
+	L << 3;
+	L << 4;
+	L << 5;
+	L << 6;
+	L << 7;
+	L << 1;
+	L << 4;
+	L << 7;
+	L << 1;
+	L << 4;
+	L << 7;
+	L << 1;
+	L << 1;
+	L << 1;
+	L << 4;
+	L << 7;
+	L << 4;
+	L << 4;
+	L << 4;
+	L << 1;
+	L << 3;
+	L << 0;
+	L << 0;
+	L << 0;
+	L << 0;
+	L << 0;
+	L << 0;
+	L << 0;
+	L << 0;
+	L << 0;
+	L << 0;
+	L << 0;
+	L << 0;
+	L << 0;
+	L << 0;
+	L << 0;
+	L << 0;
+	L << 3;
+	L << 6;
+	L << 8;
+	L << 1;
+	L << 3;
+	L << 1;
+	L << 1;
+	L << 1;
+	L << 0;
+	L << 0;
+	L << 0;
+	L << 0;
+	L << 0;
+	L << 0;
+	L << 0;
+	L << 0;
+	L << 0;
+	L << 0;
+	L << 0;
+	L << 0;
+	L << 0;
+	L << 0;
+	return L;
+end
+
+function DZA_Keys () is list
+declare
+	list L;
+begin
+	L << "IDTXT_DZA_L01";
+	L << "IDTXT_DZA_L02";
+	L << "IDTXT_DZA_L03";
+	L << "IDTXT_DZA_L04";
+	L << "IDTXT_DZA_L05";
+	L << "IDTXT_DZA_L06";
+	L << "IDTXT_DZA_L07";
+	L << "IDTXT_DZA_L08";
+	L << "IDTXT_DZA_L09";
+	L << "IDTXT_DZA_L10";
+	L << "IDTXT_DZA_L11";
+	L << "IDTXT_DZA_L12";
+	L << "IDTXT_DZA_L13";
+	L << "IDTXT_DZA_L14";
+	L << "IDTXT_DZA_L15";
+	L << "IDTXT_DZA_L16";
+	L << "IDTXT_DZA_L17";
+	L << "IDTXT_DZA_L18";
+	L << "IDTXT_DZA_L19";
+	L << "IDTXT_DZA_L20";
+	L << "IDTXT_DZA_L21";
+	L << "IDTXT_DZA_L22";
+	L << "IDTXT_DZA_L23";
+	L << "IDTXT_DZA_L24";
+	L << "IDTXT_DZA_L25";
+	L << "IDTXT_DZA_L26";
+	L << "IDTXT_DZA_L27";
+	L << "IDTXT_DZA_L28";
+	L << "IDTXT_DZA_L29";
+	L << "IDTXT_DZA_L30";
+	L << "IDTXT_DZA_L31";
+	L << "IDTXT_DZA_L32";
+	L << "IDTXT_DZA_L33";
+	L << "IDTXT_DZA_L34";
+	L << "IDTXT_DZA_L35";
+	L << "IDTXT_DZA_L36";
+	L << "IDTXT_DZA_L37";
+	L << "IDTXT_DZA_L38";
+	L << "IDTXT_DZA_L39";
+	L << "IDTXT_DZA_L40";
+	L << "IDTXT_DZA_L41";
+	L << "IDTXT_DZA_L42";
+	L << "IDTXT_DZA_L43";
+	L << "IDTXT_DZA_L44";
+	L << "IDTXT_DZA_L45";
+	L << "IDTXT_DZA_L46";
+	L << "IDTXT_DZA_L47";
+	L << "IDTXT_DZA_L48";
+	L << "IDTXT_DZA_L49";
+	L << "IDTXT_DZA_L50";
+	L << "IDTXT_DZA_L51";
+	L << "IDTXT_DZA_L52";
+	L << "IDTXT_DZA_L53";
+	L << "IDTXT_DZA_L54";
+	L << "IDTXT_DZA_L55";
+	L << "IDTXT_DZA_L56";
+	L << "IDTXT_DZA_L57";
+	L << "IDTXT_DZA_L58";
+	L << "IDTXT_DZA_L59";
+	L << "IDTXT_DZA_L60";
+	L << "IDTXT_DZA_L61";
+	L << "IDTXT_DZA_L62";
+	L << "IDTXT_DZA_L63";
+	return L;
+end
+
+function DZA_Say (agent palace, string key)
+declare
+begin
+	$LocalChatMessage ($GetUnitPlayerNumber (palace), key);
+end
+
+function DZA_Index (agent root) is integer
+declare
+	integer v;
+begin
+	v = root's "FMCE_Abil";
+	if (v >= 7733249 && v <= 7733311)
+		return v - 7733248;
+	if (v >= 1 && v <= 63)
+		return v;
+	return 1;
+end
+
+function DZA_Check (agent palace)
+// Any unit can learn (heroes, henchmen, guards, monsters, any side), like the campaign Hooligan and Varg.
+// Kept checks (crash safety only): the unit exists and is alive; it has the "castingrange" attribute of the
+// hero / monster prototypes (buildings, lairs, flags, tax collectors and caravans do not, and the engine keeps
+// the spell list only on moving units); Charm Monster only on units that fight monsters (the charm code turns
+// its target into a controlled monster, which only works on monsters).
+// A unit with castingrange 0 (henchmen, most monsters: no value in their data) gets 75, the value of the
+// melee hero classes, so its AI can reach a target with the new spell instead of walking at it forever.
+declare
+	agent root, hero;
+	integer v, i, need, lv;
+	string sp;
+begin
+	if ($IsValidGamePiece (palace) == FALSE)
+		return;
+	root = $RetrieveAgent ("GplAIRoot");
+	if ($HasAttribute ("FMCE_Give", root) == FALSE)
+		return;
+	v = root's "FMCE_Give";
+	if (v == 0)
+		return;
+	root's "FMCE_Give" = 0;
+	if (v == -2)
+		begin
+			$DZA_Say (palace, "IDTXT_DZA_NOTUNIT");
+			return;
+		end
+	if (v < 0)
+		begin
+			$DZA_Say (palace, "IDTXT_DZA_NOSEL");
+			return;
+		end
+	hero = $AgentNumber (v);
+	if ($IsValidGamePiece (hero) == FALSE)
+		begin
+			$DZA_Say (palace, "IDTXT_DZA_NOSEL");
+			return;
+		end
+	if ($IsDead (hero))
+		begin
+			$DZA_Say (palace, "IDTXT_DZA_NOSEL");
+			return;
+		end
+	if ($HasAttribute ("castingrange", hero) == FALSE)
+		begin
+			$DZA_Say (palace, "IDTXT_DZA_NOTUNIT");
+			return;
+		end
+	i = $DZA_Index (root);
+	if (i > 41)
+		if ($FM_Ruleset_MX () == FALSE)
+			begin
+				$DZA_Say (palace, "IDTXT_DZA_ORIG");
+				return;
+			end
+	sp = $ListMember ($DZA_Names (), i);
+	if (sp == "charm_monster")
+		begin
+			if ($HasAttribute ("EnemyType", hero) == FALSE)
+				begin
+					$DZA_Say (palace, "IDTXT_DZA_CHARM");
+					return;
+				end
+			if (hero's "EnemyType" != "Monster" && hero's "EnemyType" != "monster")
+				begin
+					$DZA_Say (palace, "IDTXT_DZA_CHARM");
+					return;
+				end
+		end
+	if (hero's "castingrange" < 1)
+		hero's "castingrange" = 75;
+	$LearnSpell (hero, sp);
+	$DZA_Say (palace, $ListMember ($DZA_Keys (), i));
+	need = $ListMember ($DZA_Levels (), i);
+	lv = $GetAttribute (hero, #ATTRIB_ExperienceLevel);
+	if (need >= 1 && lv < need)
+		$DZA_Say (palace, $ListMember ($DZA_Lv_Keys (), need));
+end
+
+function DZA_Lv_Keys () is list
+declare
+	list L;
+begin
+	L << "IDTXT_DZA_LV1";
+	L << "IDTXT_DZA_LV2";
+	L << "IDTXT_DZA_LV3";
+	L << "IDTXT_DZA_LV4";
+	L << "IDTXT_DZA_LV5";
+	L << "IDTXT_DZA_LV6";
+	L << "IDTXT_DZA_LV7";
+	L << "IDTXT_DZA_LV8";
+	return L;
+end
+
+// Original ruleset: GplAIRoot's UtilityScript slot (AIRoot prototype function, never threaded by the original
+// quests except the "Vampiric Revenge" demo, which uses it for its victory) holds the Give watcher.
+// Same pattern as the stock Quests_3 Strangleweed event: assign the slot, then NewThread on it.
+function DZA_Ensure_B (agent palace)
+declare
+	agent root;
+begin
+	if ($IsValidGamePiece (palace) == FALSE)
+		return;
+	root = $RetrieveAgent ("GplAIRoot");
+	if ($HasAttribute ("UtilityScript", root) == FALSE)
+		return;
+	if ($HasAttribute ("Quest_Number", root))
+		if (root's "Quest_Number" == 500)
+			return;
+	root's "UtilityScript" = $DZA_Watch_B;
+	if ($IsRunning (root's "UtilityScript") == FALSE)
+		$NewThread (root's "UtilityScript", 700, palace);
+end
+
+function DZA_Watch_B (agent thisagent)
+declare
+begin
+	if ($isdead (thisagent))
+		return;
+	$DZA_Check (thisagent);
 end
 
 // ===== one mod for both rulesets =====

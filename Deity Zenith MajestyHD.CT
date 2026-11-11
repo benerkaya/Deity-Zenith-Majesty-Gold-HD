@@ -184,7 +184,8 @@ function FMCE_find()
   say('Faction now: ' .. (({[0] = 'Blue', [1] = 'HOSTILE', [2] = 'RED', [3] = 'GREEN'})[fv] or 'unknown value'))
   say('Now set the entries below. The next Explore or Attack flag shows a chat message telling whether summon is ON or OFF.')
   local headk = pick.FMCE_On.head
-  for _, s in ipairs({{name = 'FMCE_Ping', magic = 0x740000, lo = 0, hi = 99}, {name = 'FMCE_Rules', magic = 0x750000, lo = 1, hi = 2}}) do
+  for _, s in ipairs({{name = 'FMCE_Ping', magic = 0x740000, lo = 0, hi = 99}, {name = 'FMCE_Rules', magic = 0x750000, lo = 1, hi = 2},
+                      {name = 'FMCE_Abil', magic = 0x760000, lo = 1, hi = 63}, {name = 'FMCE_Give', magic = 0, lo = -1, hi = 2147483647}}) do
     local st = {text = 0, refs = 0, named = 0}
     for _, h in ipairs(findname(s, st)) do
       if pick[s.name] == nil and h.head == headk then pick[s.name] = h end
@@ -195,6 +196,71 @@ function FMCE_find()
   end
   FMCE_PICK = pick
   return true, table.concat(out, '\n')
+end
+-- Give Ability to Selected Unit. The game's selection (MajestyHD.exe, static addresses, no ASLR):
+--  [0x7C0ABC] = selection manager (singleton, 0x425D00); manager+0x48 = selected unit (set at 0x42A6CE,
+--  cleared to 0 at 0x42A9C1). unit+4 = the unit's engine attribute map (std::map: head +0x18; node: left +0,
+--  parent +4, right +8, key +0x0C, value +0x10, isnil byte +0x15). Key 0x4541 ('AE') = the unit's GPL agent
+--  number; $GetParent builds its agentRef from the same key (0x42E6FF). Only reads the game; the one write is
+--  the mod's own FMCE_Give integer. Only moving units (class VehicleRec, vtable 0x73B08C: heroes, henchmen,
+--  monsters) keep a spell list (unit+0x168, set up in VehicleRec only); $LearnSpell writes there without a
+--  type check, so buildings, lairs, flags and terrain (smaller classes) are refused here (-2) and in the mod.
+function DZ_u32(a)
+  if a == nil or a == 0 then return nil end
+  local v = readInteger(a)
+  if v == nil then return nil end
+  if v &lt; 0 then v = v + 4294967296 end
+  return v
+end
+function DZ_selected_unit()
+  local mgr = DZ_u32(0x7C0ABC)
+  if mgr == nil or mgr == 0 then return nil end
+  local unit = DZ_u32(mgr + 0x48)
+  if unit == nil or unit == 0 then return nil end
+  return unit
+end
+function DZ_unit_agent(unit)
+  local head = DZ_u32(unit + 0x1C)
+  if head == nil or readBytes(head + 0x15, 1) ~= 1 then return nil end
+  local n = DZ_u32(head + 4)
+  for i = 1, 64 do
+    if n == nil or n == 0 or n == head or readBytes(n + 0x15, 1) ~= 0 then return nil end
+    local k = DZ_u32(n + 0x0C)
+    if k == nil then return nil end
+    if k == 0x4541 then return DZ_u32(n + 0x10) end
+    if k &lt; 0x4541 then n = DZ_u32(n + 8) else n = DZ_u32(n) end
+  end
+  return nil
+end
+function DZ_helper_ok(h, name)
+  if h == nil or h.node == nil or h.addr == nil then return false end
+  if DZ_u32(h.node + 0x18) ~= h.addr - 8 then return false end
+  if DZ_u32(h.addr - 8) ~= 0x007463F4 or DZ_u32(h.addr - 4) ~= 1 then return false end
+  local p = DZ_u32(h.node + 0x0C)
+  local len = DZ_u32(h.node + 0x14)
+  local fl = readBytes(h.node + 0x13, 1)
+  if p == nil or len == nil or fl == nil or len ~= #name then return false end
+  local s = readString(p, len, (fl % 2) == 1)
+  return s ~= nil and s:lower() == name:lower()
+end
+-- writes the selected unit's agent number for the mod to pick up (-1: nothing selected, -2: not a unit)
+function DZ_give_write(addr)
+  local unit = DZ_selected_unit()
+  if unit == nil then
+    writeInteger(addr, -1)
+    return false
+  end
+  if DZ_u32(unit) ~= 0x0073B08C then
+    writeInteger(addr, -2)
+    return false
+  end
+  local id = DZ_unit_agent(unit)
+  if id == nil or id == 0 or id &gt; 2147483647 then
+    writeInteger(addr, -1)
+    return false
+  end
+  writeInteger(addr, id)
+  return true
 end
 -- Attach to the game by itself (no process, or another process opened)
 local function deity_attached()
@@ -236,9 +302,16 @@ unregisterSymbol('FMCE_Type')
 unregisterSymbol('FMCE_On')
 unregisterSymbol('FMCE_Count')
 unregisterSymbol('FMCE_Faction')
+unregisterSymbol('FMCE_Abil')
+unregisterSymbol('FMCE_Give')
 {$asm}
 </AssemblerScript>
       <CheatEntries>
+        <CheatEntry>
+          <ID>9</ID>
+          <Description>"---Summon Units/Buildings---"</Description>
+          <GroupHeader>1</GroupHeader>
+        </CheatEntry>
         <CheatEntry>
           <ID>10</ID>
           <Description>"Flag summon ON/OFF"</Description>
@@ -557,6 +630,176 @@ unregisterSymbol('FMCE_Faction')
           <VariableType>4 Bytes</VariableType>
           <Address>FMCE_Faction</Address>
         </CheatEntry>
+        <CheatEntry>
+          <ID>15</ID>
+          <Description>"---Give Ability to Selected Unit---"</Description>
+          <GroupHeader>1</GroupHeader>
+        </CheatEntry>
+        <CheatEntry>
+          <ID>16</ID>
+          <Description>"Ability"</Description>
+          <DropDownList DescriptionOnly="1" DisplayValueAsItem="1">7733249:Energy Blast
+7733250:Power Shock
+7733251:Flame Shield
+7733252:Fire Shield
+7733253:Fire Blast
+7733254:Teleport
+7733255:Fire Ball
+7733256:Resist Magic
+7733257:Meteor Storm
+7733258:Healer's Healing
+7733259:Meditation
+7733260:Aura of Peace
+7733261:Hand of Steel
+7733262:Stone Skin
+7733263:Iron Will
+7733264:Drain Life
+7733265:Animate Skeleton
+7733266:Charm Monster
+7733267:Camouflage
+7733268:Change Shape
+7733269:Shield of Light
+7733270:Sun Scorch
+7733271:Teleport Short
+7733272:Teleport Short (Amulet)
+7733273:Super Strike
+7733274:Acid Bolt
+7733275:Electrical Fury
+7733276:Exploding Aura
+7733277:Force
+7733278:Paralytic Gaze
+7733279:Insect Swarm
+7733280:Life Leach
+7733281:Level Leach
+7733282:Magic Mirror
+7733283:Vortex
+7733284:Summon Skeleton
+7733285:Summon Spider
+7733286:Inferno
+7733287:Radiate Energy
+7733288:Get the Healer
+7733289:Super Strike (Monster)
+7733290:Harm Undead (Expansion)
+7733291:Double Attack (Expansion)
+7733292:Teleport Long (Expansion)
+7733293:Howl of Discord (Expansion)
+7733294:Fire Hammer (Expansion)
+7733295:Stoneback's Shield (Expansion)
+7733296:Damage Shield (Expansion)
+7733297:Rune of Healing (Expansion)
+7733298:Gorgon Petrify (Expansion)
+7733299:Medusa Slow (Expansion)
+7733300:Horrify (Expansion)
+7733301:Infectious Cloud (Expansion)
+7733302:Pestilence (Expansion)
+7733303:Shadow Beast Speed (Expansion)
+7733304:Wendigo Blink (Expansion)
+7733305:Summon Medusae (Expansion)
+7733306:Summon Shadow Beast (Expansion)
+7733307:Mind Warp (Expansion)
+7733308:Terrify (Expansion)
+7733309:Speed Monster (Expansion)
+7733310:Damage Shield (Monster) (Expansion)
+7733311:Medusa Stare (Expansion)
+</DropDownList>
+          <ShowAsSigned>0</ShowAsSigned>
+          <VariableType>4 Bytes</VariableType>
+          <Address>FMCE_Abil</Address>
+        </CheatEntry>
+        <CheatEntry>
+          <ID>17</ID>
+          <Description>"Give Ability"</Description>
+          <VariableType>Auto Assembler Script</VariableType>
+          <AssemblerScript>[ENABLE]
+{$lua}
+if syntaxcheck then return end
+-- Deity Zenith for Majesty Gold HD - by Bener Kaya
+-- Gives the picked Ability to the unit selected in the game (same as Ctrl+Num 1), then unticks itself.
+-- Give Ability to Selected Unit. The game's selection (MajestyHD.exe, static addresses, no ASLR):
+--  [0x7C0ABC] = selection manager (singleton, 0x425D00); manager+0x48 = selected unit (set at 0x42A6CE,
+--  cleared to 0 at 0x42A9C1). unit+4 = the unit's engine attribute map (std::map: head +0x18; node: left +0,
+--  parent +4, right +8, key +0x0C, value +0x10, isnil byte +0x15). Key 0x4541 ('AE') = the unit's GPL agent
+--  number; $GetParent builds its agentRef from the same key (0x42E6FF). Only reads the game; the one write is
+--  the mod's own FMCE_Give integer. Only moving units (class VehicleRec, vtable 0x73B08C: heroes, henchmen,
+--  monsters) keep a spell list (unit+0x168, set up in VehicleRec only); $LearnSpell writes there without a
+--  type check, so buildings, lairs, flags and terrain (smaller classes) are refused here (-2) and in the mod.
+function DZ_u32(a)
+  if a == nil or a == 0 then return nil end
+  local v = readInteger(a)
+  if v == nil then return nil end
+  if v &lt; 0 then v = v + 4294967296 end
+  return v
+end
+function DZ_selected_unit()
+  local mgr = DZ_u32(0x7C0ABC)
+  if mgr == nil or mgr == 0 then return nil end
+  local unit = DZ_u32(mgr + 0x48)
+  if unit == nil or unit == 0 then return nil end
+  return unit
+end
+function DZ_unit_agent(unit)
+  local head = DZ_u32(unit + 0x1C)
+  if head == nil or readBytes(head + 0x15, 1) ~= 1 then return nil end
+  local n = DZ_u32(head + 4)
+  for i = 1, 64 do
+    if n == nil or n == 0 or n == head or readBytes(n + 0x15, 1) ~= 0 then return nil end
+    local k = DZ_u32(n + 0x0C)
+    if k == nil then return nil end
+    if k == 0x4541 then return DZ_u32(n + 0x10) end
+    if k &lt; 0x4541 then n = DZ_u32(n + 8) else n = DZ_u32(n) end
+  end
+  return nil
+end
+function DZ_helper_ok(h, name)
+  if h == nil or h.node == nil or h.addr == nil then return false end
+  if DZ_u32(h.node + 0x18) ~= h.addr - 8 then return false end
+  if DZ_u32(h.addr - 8) ~= 0x007463F4 or DZ_u32(h.addr - 4) ~= 1 then return false end
+  local p = DZ_u32(h.node + 0x0C)
+  local len = DZ_u32(h.node + 0x14)
+  local fl = readBytes(h.node + 0x13, 1)
+  if p == nil or len == nil or fl == nil or len ~= #name then return false end
+  local s = readString(p, len, (fl % 2) == 1)
+  return s ~= nil and s:lower() == name:lower()
+end
+-- writes the selected unit's agent number for the mod to pick up (-1: nothing selected, -2: not a unit)
+function DZ_give_write(addr)
+  local unit = DZ_selected_unit()
+  if unit == nil then
+    writeInteger(addr, -1)
+    return false
+  end
+  if DZ_u32(unit) ~= 0x0073B08C then
+    writeInteger(addr, -2)
+    return false
+  end
+  local id = DZ_unit_agent(unit)
+  if id == nil or id == 0 or id &gt; 2147483647 then
+    writeInteger(addr, -1)
+    return false
+  end
+  writeInteger(addr, id)
+  return true
+end
+local mr = memrec
+local h = (FMCE_PICK ~= nil) and FMCE_PICK.FMCE_Give or nil
+if not DZ_helper_ok(h, 'FMCE_Give') then
+  showMessage('Deity Zenith: tick "Deity Zenith - Activate" first (or press Ctrl+Num 0), then try again.')
+  error('Deity Zenith: not active')
+end
+DZ_give_write(h.addr)
+if mr ~= nil and createTimer ~= nil then
+  local tm = createTimer(nil, false)
+  tm.Interval = 250
+  tm.OnTimer = function(x) x.destroy() pcall(function() mr.Active = false end) end
+  tm.Enabled = true
+end
+{$asm}
+[DISABLE]
+{$lua}
+if syntaxcheck then return end
+{$asm}
+</AssemblerScript>
+        </CheatEntry>
       </CheatEntries>
     </CheatEntry>
     <CheatEntry>
@@ -741,7 +984,8 @@ function FMCE_find()
   say('Faction now: ' .. (({[0] = 'Blue', [1] = 'HOSTILE', [2] = 'RED', [3] = 'GREEN'})[fv] or 'unknown value'))
   say('Now set the entries below. The next Explore or Attack flag shows a chat message telling whether summon is ON or OFF.')
   local headk = pick.FMCE_On.head
-  for _, s in ipairs({{name = 'FMCE_Ping', magic = 0x740000, lo = 0, hi = 99}, {name = 'FMCE_Rules', magic = 0x750000, lo = 1, hi = 2}}) do
+  for _, s in ipairs({{name = 'FMCE_Ping', magic = 0x740000, lo = 0, hi = 99}, {name = 'FMCE_Rules', magic = 0x750000, lo = 1, hi = 2},
+                      {name = 'FMCE_Abil', magic = 0x760000, lo = 1, hi = 63}, {name = 'FMCE_Give', magic = 0, lo = -1, hi = 2147483647}}) do
     local st = {text = 0, refs = 0, named = 0}
     for _, h in ipairs(findname(s, st)) do
       if pick[s.name] == nil and h.head == headk then pick[s.name] = h end
@@ -752,6 +996,71 @@ function FMCE_find()
   end
   FMCE_PICK = pick
   return true, table.concat(out, '\n')
+end
+-- Give Ability to Selected Unit. The game's selection (MajestyHD.exe, static addresses, no ASLR):
+--  [0x7C0ABC] = selection manager (singleton, 0x425D00); manager+0x48 = selected unit (set at 0x42A6CE,
+--  cleared to 0 at 0x42A9C1). unit+4 = the unit's engine attribute map (std::map: head +0x18; node: left +0,
+--  parent +4, right +8, key +0x0C, value +0x10, isnil byte +0x15). Key 0x4541 ('AE') = the unit's GPL agent
+--  number; $GetParent builds its agentRef from the same key (0x42E6FF). Only reads the game; the one write is
+--  the mod's own FMCE_Give integer. Only moving units (class VehicleRec, vtable 0x73B08C: heroes, henchmen,
+--  monsters) keep a spell list (unit+0x168, set up in VehicleRec only); $LearnSpell writes there without a
+--  type check, so buildings, lairs, flags and terrain (smaller classes) are refused here (-2) and in the mod.
+function DZ_u32(a)
+  if a == nil or a == 0 then return nil end
+  local v = readInteger(a)
+  if v == nil then return nil end
+  if v &lt; 0 then v = v + 4294967296 end
+  return v
+end
+function DZ_selected_unit()
+  local mgr = DZ_u32(0x7C0ABC)
+  if mgr == nil or mgr == 0 then return nil end
+  local unit = DZ_u32(mgr + 0x48)
+  if unit == nil or unit == 0 then return nil end
+  return unit
+end
+function DZ_unit_agent(unit)
+  local head = DZ_u32(unit + 0x1C)
+  if head == nil or readBytes(head + 0x15, 1) ~= 1 then return nil end
+  local n = DZ_u32(head + 4)
+  for i = 1, 64 do
+    if n == nil or n == 0 or n == head or readBytes(n + 0x15, 1) ~= 0 then return nil end
+    local k = DZ_u32(n + 0x0C)
+    if k == nil then return nil end
+    if k == 0x4541 then return DZ_u32(n + 0x10) end
+    if k &lt; 0x4541 then n = DZ_u32(n + 8) else n = DZ_u32(n) end
+  end
+  return nil
+end
+function DZ_helper_ok(h, name)
+  if h == nil or h.node == nil or h.addr == nil then return false end
+  if DZ_u32(h.node + 0x18) ~= h.addr - 8 then return false end
+  if DZ_u32(h.addr - 8) ~= 0x007463F4 or DZ_u32(h.addr - 4) ~= 1 then return false end
+  local p = DZ_u32(h.node + 0x0C)
+  local len = DZ_u32(h.node + 0x14)
+  local fl = readBytes(h.node + 0x13, 1)
+  if p == nil or len == nil or fl == nil or len ~= #name then return false end
+  local s = readString(p, len, (fl % 2) == 1)
+  return s ~= nil and s:lower() == name:lower()
+end
+-- writes the selected unit's agent number for the mod to pick up (-1: nothing selected, -2: not a unit)
+function DZ_give_write(addr)
+  local unit = DZ_selected_unit()
+  if unit == nil then
+    writeInteger(addr, -1)
+    return false
+  end
+  if DZ_u32(unit) ~= 0x0073B08C then
+    writeInteger(addr, -2)
+    return false
+  end
+  local id = DZ_unit_agent(unit)
+  if id == nil or id == 0 or id &gt; 2147483647 then
+    writeInteger(addr, -1)
+    return false
+  end
+  writeInteger(addr, id)
+  return true
 end
 local okcall, err = pcall(function()
 -- Deity Zenith hotkeys. Appended to the find code in the same chunk, so the
@@ -930,6 +1239,18 @@ H.actions = {
   cplus = act(function() local c = get('FMCE_Count') or 1 if c &lt; 10 then c = c + 1 end put('FMCE_Count', c) end),
   cminus = act(function() local c = get('FMCE_Count') or 1 if c &gt; 1 then c = c - 1 end put('FMCE_Count', c) end),
   say = act(function() return nil end),
+  give = function()
+    pcall(function()
+      if not ensure() then return end
+      local h = H.pick and H.pick.FMCE_Give
+      if not DZ_helper_ok(h, 'FMCE_Give') then
+        scan('Scanning')
+        h = H.pick and H.pick.FMCE_Give
+      end
+      if not DZ_helper_ok(h, 'FMCE_Give') then return end
+      DZ_give_write(h.addr)
+    end)
+  end,
   rules = function()
     H.rules = (H.rules == 1) and 2 or 1
     talk('Hotkeys use the ' .. H.rulesname[H.rules] .. ' list, when the mod does not report its ruleset.')
@@ -950,6 +1271,7 @@ H.bind = {
   {'cminus', VK_SUBTRACT}, -- Ctrl+Num -: summons per flag -1 (min 1)
   {'say', VK_MULTIPLY}, -- Ctrl+Num *: repeat the current selection
   {'rules', VK_DECIMAL}, -- Ctrl+Num .: switch list Expansion / Original (fallback only)
+  {'give', VK_NUMPAD1}, -- Ctrl+Num 1: give the picked ability to the selected unit
 }
 for _, b in ipairs(H.bind) do
   local hk = createHotkey(H.actions[b[1]], VK_CONTROL, b[2])
@@ -969,7 +1291,7 @@ if not okcall then
   showMessage('Deity Zenith hotkeys: SCRIPT ERROR\n\n' .. tostring(err))
   error('Deity Zenith hotkeys: script error')
 end
-showMessage('Deity Zenith hotkeys are ON (NumLock on).\n\nCtrl+Num 0: activate / re-scan (also after loading a save)\nCtrl+Num 5: flag summon ON / OFF\nCtrl+Num 6: next entry\nCtrl+Num 4: previous entry\nCtrl+Num 9: 10 entries forward\nCtrl+Num 3: 10 entries back\nCtrl+Num 8: next category (monsters, nature, henchmen, heroes, buildings, lairs)\nCtrl+Num 2: previous category\nCtrl+Num 7: faction Blue &gt; Hostile &gt; Red &gt; Green\nCtrl+Num +: summons per flag +1 (max 10)\nCtrl+Num -: summons per flag -1 (min 1)\nCtrl+Num *: repeat the current selection\nCtrl+Num .: switch list Expansion / Original (fallback only)\n\nNow start Majesty (fullscreen is fine). Cheat Engine attaches by itself when MajestyHD.exe starts. In a game, press Ctrl+Num 0 once (and again after loading a save).')
+showMessage('Deity Zenith hotkeys are ON (NumLock on).\n\nCtrl+Num 0: activate / re-scan (also after loading a save)\nCtrl+Num 5: flag summon ON / OFF\nCtrl+Num 6: next entry\nCtrl+Num 4: previous entry\nCtrl+Num 9: 10 entries forward\nCtrl+Num 3: 10 entries back\nCtrl+Num 8: next category (monsters, nature, henchmen, heroes, buildings, lairs)\nCtrl+Num 2: previous category\nCtrl+Num 7: faction Blue &gt; Hostile &gt; Red &gt; Green\nCtrl+Num +: summons per flag +1 (max 10)\nCtrl+Num -: summons per flag -1 (min 1)\nCtrl+Num *: repeat the current selection\nCtrl+Num .: switch list Expansion / Original (fallback only)\nCtrl+Num 1: give the picked ability to the selected unit\n\nNow start Majesty (fullscreen is fine). Cheat Engine attaches by itself when MajestyHD.exe starts. In a game, press Ctrl+Num 0 once (and again after loading a save).')
 {$asm}
 [DISABLE]
 {$lua}
@@ -1050,6 +1372,11 @@ end
         <CheatEntry>
           <ID>52</ID>
           <Description>"Ctrl+Num . = switch list Expansion / Original (fallback only)"</Description>
+          <GroupHeader>1</GroupHeader>
+        </CheatEntry>
+        <CheatEntry>
+          <ID>53</ID>
+          <Description>"Ctrl+Num 1 = give the picked ability to the selected unit"</Description>
           <GroupHeader>1</GroupHeader>
         </CheatEntry>
       </CheatEntries>

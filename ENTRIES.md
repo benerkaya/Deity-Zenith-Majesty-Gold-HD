@@ -277,3 +277,80 @@ monsters 1..29, nature 30..32, henchmen 101..107, heroes 111..130, buildings 201
   423 [Lair] Dragon King Tomb (quest)
   424 [Lair] Liche Queen's Lair (quest)
 ```
+
+## Abilities
+
+Abilities you can give to a unit (row **"Ability"**, then **Give Ability** or **Ctrl+Num 1**). "Level" is the unit level from which it casts the ability; "any" means every unit. The rules are in the [README](README.md#give-abilities-to-a-unit).
+
+### Freestyle, Northern Expansion and original Majesty
+
+| Ability | Level |
+|---|---|
+| Energy Blast | 1 |
+| Power Shock | 1 |
+| Flame Shield | 1 |
+| Fire Shield | 2 |
+| Fire Blast | 3 |
+| Teleport | 4 |
+| Fire Ball | 5 |
+| Resist Magic | 6 |
+| Meteor Storm | 7 |
+| Healer's Healing | 1 |
+| Meditation | 4 |
+| Aura of Peace | 7 |
+| Hand of Steel | 1 |
+| Stone Skin | 4 |
+| Iron Will | 7 |
+| Drain Life | 1 |
+| Animate Skeleton | 1 |
+| Charm Monster | 1 |
+| Camouflage | 4 |
+| Change Shape | 7 |
+| Shield of Light | 4 |
+| Sun Scorch | 4 |
+| Teleport Short | 4 |
+| Teleport Short (Amulet) | 1 |
+| Super Strike | 3 |
+| Acid Bolt | any |
+| Electrical Fury | any |
+| Exploding Aura | any |
+| Force | any |
+| Paralytic Gaze | any |
+| Insect Swarm | any |
+| Life Leach | any |
+| Level Leach | any |
+| Magic Mirror | any |
+| Vortex | any |
+| Summon Skeleton | any |
+| Summon Spider | any |
+| Inferno | any |
+| Radiate Energy | any |
+| Get the Healer | any |
+| Super Strike (Monster) | any |
+
+### Freestyle and Northern Expansion only (Expansion)
+
+| Ability | Level |
+|---|---|
+| Harm Undead | 3 |
+| Double Attack | 6 |
+| Teleport Long | 8 |
+| Howl of Discord | 1 |
+| Fire Hammer | 3 |
+| Stoneback's Shield | 1 |
+| Damage Shield | 1 |
+| Rune of Healing | 1 |
+| Gorgon Petrify | any |
+| Medusa Slow | any |
+| Horrify | any |
+| Infectious Cloud | any |
+| Pestilence | any |
+| Shadow Beast Speed | any |
+| Wendigo Blink | any |
+| Summon Medusae | any |
+| Summon Shadow Beast | any |
+| Mind Warp | any |
+| Terrify | any |
+| Speed Monster | any |
+| Damage Shield (Monster) | any |
+| Medusa Stare | any |

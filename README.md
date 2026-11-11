@@ -9,6 +9,8 @@ Deity Zenith lets you play god in **Majesty Gold HD**. Choose something in a Che
 - **Heroes** (every class, plus the quest heroes)
 - **Buildings** and **lairs**
 
+You can also **give abilities** to any unit: heroes, henchmen and monsters of every side can learn spells and abilities of other classes and of monsters.
+
 You also choose **whose side** the summons are on: **Blue** (you), **Hostile** (the monsters), the **Red** kingdom or the **Green** kingdom. You can summon 1 to 10 per flag.
 
 - **Explore flag:** the summons appear at the flag.
@@ -49,7 +51,7 @@ Double-click **`Uninstall.bat`**. It puts back the game's original files and rem
 2. Tick **"Deity Zenith Hotkeys (tick before starting Majesty)"**. Make sure **NumLock** is on.
 3. Start Majesty Gold HD and start or load a game. The chat says *"DZ is running..."*.
 4. Tick **"Deity Zenith - Activate"** or press **Ctrl+Num 0**. Cheat Engine connects to the game by itself. Do this again after loading a save.
-5. In the table, choose:
+5. In the table, under **"---Summon Units/Buildings---"**, choose:
    - what to summon: use **"Expansion / Freestyle: what to summon"** in Freestyle and expansion quests, and **"Original Majesty: what to summon"** in the original quests;
    - the **"Faction"**;
    - **"Summons per flag"**.
@@ -72,8 +74,32 @@ You can also do everything with the keyboard while playing:
 | Ctrl+Num - | summons per flag -1 (min 1) |
 | Ctrl+Num * | repeat the current selection |
 | Ctrl+Num . | switch list Expansion / Original (fallback only) |
+| Ctrl+Num 1 | give the chosen ability to the selected unit |
 
 Every change is confirmed by a chat message in the game. All entries and their numbers are listed in [ENTRIES.md](ENTRIES.md).
+
+## Give abilities to a unit
+
+Teach any unit a spell or ability from another class or from a monster: a Warrior with Fire Ball, a City Guard with Healer's Healing, a goblin with Meteor Storm, an enemy hero with Terrify. It works on heroes, henchmen, guards and monsters of every side, like the campaign's spell-casting Hooligan.
+
+1. Activate Deity Zenith (see above).
+2. In the game, click the unit.
+3. In the table, under **"---Give Ability to Selected Unit---"**, choose the **"Ability"**.
+4. Tick **"Give Ability"** (it unticks itself) or press **Ctrl+Num 1**.
+
+The chat says *"[DZ] The selected unit learned ..."*. The unit keeps the ability, also in saves, and uses it by itself when it fights or travels. The game's own campaign heroes, monsters and magic items get spells the same way.
+
+**Rules**
+
+- **Who can learn:** heroes, henchmen (peasants, guards, Hooligan) and monsters, yours or any other side. Buildings, lairs, flags, tax collectors and caravans can't; the chat says so.
+- **Level:** the game lets a unit cast a spell only from the spell's level on. A unit below that level keeps the ability but doesn't cast it yet, and the chat tells you the level. Many henchmen and monsters have a low level, so abilities marked "any" in [ENTRIES.md](ENTRIES.md#abilities) suit them best. Levels are never changed.
+- **Monsters only:** Speed Monster, Damage Shield (Monster) and Medusa Stare are cast only by monsters, on nearby monsters of their kind. Other units keep them but never cast them.
+- **Enemy heroes only:** Mind Warp, Terrify, Inferno, Radiate Energy and Get the Healer only hit enemy heroes (Inferno also hits buildings). Inferno and Radiate Energy become the unit's favourite attack, so they suit monsters and enemy units best.
+- **Summons:** Summon Spider, Summon Medusae and Summon Shadow Beast call monsters on the caster's side that behave like wild monsters, also when your own units cast them.
+- **Charm Monster** only works on units that fight monsters (heroes, guards, tamed monsters).
+- A unit without a spell range gets the range of the fighting hero classes, so it can reach its target.
+- Abilities marked **(Expansion)** only exist in Freestyle and the Northern Expansion quests.
+- Some units have no casting animation, so they cast without one.
 
 ## Good to know
 
@@ -90,6 +116,14 @@ Every change is confirmed by a chat message in the game. All entries and their n
 - In Freestyle and expansion games, the "Original Majesty" row shows a plain number. That is normal.
 - Deity Zenith is made for single player.
 
+## Troubleshooting
+
+- **Hotkeys do nothing**: tick "Deity Zenith Hotkeys (tick before starting Majesty)" and make sure NumLock is on.
+- **"Select a unit first"**: click the unit in the game (so its info panel shows), then give the ability again.
+- **Nothing happens when giving an ability**: run `Install.bat` again after updating Deity Zenith (`Status.bat` must say it is active). After loading a save, press Ctrl+Num 0 again. If it still does nothing, place one Explore or Attack flag (with flag summon OFF), then press Ctrl+Num 0 and try again.
+- **The unit learned it but never casts it**: it is below the ability's level, or it is a monsters-only ability (see the rules above).
+- **"Deity Zenith values not found"**: start or load a game first (not the menu), then press Ctrl+Num 0.
+
 ## What's in the package
 
 The files inside `DeityZenith\` keep the short internal name `Deity` (the names the game loads), so updates and uninstalls work with earlier versions too.
@@ -103,7 +137,7 @@ The files inside `DeityZenith\` keep the short internal name `Deity` (the names 
 | `DeityZenith\Deity_MX_Text.xml`, `DeityZenith\Deity_Text.xml` | the mod's chat texts (expansion / original) |
 | `DeityZenith\GPL\` | the mod's source code |
 | `Install_DeityZenith.ps1` | the script behind the .bat files |
-| `ENTRIES.md` | list of everything you can summon |
+| `ENTRIES.md` | list of everything you can summon, and every ability |
 
 ## Credits
 
